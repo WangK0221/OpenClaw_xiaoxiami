@@ -103,7 +103,37 @@
       "validation": [
         "node -e \"require('./src/evolve'); require('./src/gep/solidify'); console.log('ok')\""
       ]
+    },
+    {
+      "type": "Gene",
+      "schema_version": "1.5.0",
+      "id": "gene_auto_9288b119",
+      "category": "optimize",
+      "signals_match": [
+        "high_tool_usage:write"
+      ],
+      "preconditions": [
+        "signals_key == high_tool_usage:write"
+      ],
+      "strategy": [
+        "Extract structured signals from logs and user instructions",
+        "Select an existing Gene by signals match (no improvisation)",
+        "Estimate blast radius (files, lines) before editing and record it",
+        "Apply smallest reversible patch",
+        "Validate using declared validation steps; rollback on failure",
+        "Solidify knowledge: append EvolutionEvent, update Gene/Capsule store"
+      ],
+      "constraints": {
+        "max_files": 12,
+        "forbidden_paths": [
+          ".git",
+          "node_modules"
+        ]
+      },
+      "validation": [
+        "node -e \"require('./src/gep/solidify'); console.log('ok')\""
+      ],
+      "asset_id": "sha256:c924bf971a58a593488fc91561f78b4c1817c195c9e506b44fc99699ee662d2e"
     }
   ]
 }
-

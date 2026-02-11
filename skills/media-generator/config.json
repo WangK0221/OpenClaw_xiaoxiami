@@ -1,0 +1,29 @@
+{
+  "name": "media-generator",
+  "version": "1.0.0",
+  "description": "Advanced media generation for AI agents",
+  "voice": {
+    "default_engine": "openclaw-tts",
+    "elevenlabs_api_key": "",
+    "azure_speech_key": "",
+    "azure_speech_region": "",
+    "supported_voices": ["nova", "echo", "shimmer", "onyx"]
+  },
+  "image": {
+    "default_engine": "nano-banana-pro",
+    "gemini_api_key": "AIzaSyDMMHVVzgl5QgPMOHp7ooZB1h6GEN_J3BI",
+    "supported_resolutions": ["1K", "2K", "4K"]
+  },
+  "video": {
+    "default_engine": "cloud-video-api",
+    "runway_ml_api_key": "",
+    "pika_labs_api_key": "",
+    "google_cloud_project": "",
+    "supported_formats": ["mp4", "webm", "gif"]
+  },
+  "output": {
+    "directory": "/home/admin/.openclaw/workspace/media/",
+    "auto_cleanup": true,
+    "max_file_size_mb": 100
+  }
+}
