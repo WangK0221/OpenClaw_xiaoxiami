@@ -1,0 +1,10 @@
+{
+  "name": "feishu-evolver-wrapper",
+  "version": "1.5.0",
+  "description": "Feishu-specific wrapper for capability-evolver",
+  "main": "index.js",
+  "dependencies": {
+    "commander": "^14.0.3",
+    "evolver": "file:../evolver"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "learning-analytics",
+  "version": "1.0.0",
+  "description": "Analytics and reporting for AI learning progress",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["ai", "learning", "analytics", "progress", "reporting"],
+  "author": "OpenClaw Evolution Engine",
+  "license": "MIT"
+}

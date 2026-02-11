@@ -1,0 +1,65 @@
+{
+  "learningPlan": {
+    "name": "小虾米AI进化学习计划",
+    "version": "1.0.0",
+    "creator": "Star",
+    "createdAt": "2026-02-12T01:15:00Z",
+    "objectives": [
+      {
+        "area": "技术能力",
+        "goals": [
+          "掌握最新的AI模型和工具使用",
+          "提升代码生成和调试能力",
+          "学习新的编程语言和框架"
+        ],
+        "priority": 3
+      },
+      {
+        "area": "沟通能力",
+        "goals": [
+          "优化对话理解和生成",
+          "提升多语言支持能力",
+          "改进情感识别和响应"
+        ],
+        "priority": 2
+      },
+      {
+        "area": "实用技能",
+        "goals": [
+          "增强医疗领域知识（当前技能等级: 2）",
+          "提升制造领域知识（当前技能等级: 3）",
+          "学习烹饪技能（当前技能等级: 1）"
+        ],
+        "priority": 1
+      }
+    ],
+    "schedule": {
+      "daily": {
+        "duration": 30,
+        "focus": ["实用技能", "技术能力"]
+      },
+      "weekly": {
+        "duration": 120,
+        "focus": ["沟通能力", "综合项目"]
+      },
+      "monthly": {
+        "duration": 240,
+        "focus": ["深度学习", "创新项目"]
+      }
+    },
+    "assessment": {
+      "frequency": "weekly",
+      "metrics": [
+        "用户满意度",
+        "任务完成率",
+        "响应速度",
+        "知识覆盖度"
+      ]
+    },
+    "resources": {
+      "documentation": "/opt/openclaw/docs",
+      "skills": "/home/admin/.openclaw/workspace/skills",
+      "memory": "/home/admin/.openclaw/workspace/memory"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "evolution-orchestrator",
+  "version": "1.0.0",
+  "description": "Dynamic evolution strategy orchestrator that prevents stagnation by automatically switching between repair, optimize, and innovate intents based on system signals",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["evolution", "orchestrator", "ai", "stagnation-prevention"],
+  "author": "OpenClaw Evolution Engine",
+  "license": "MIT"
+}

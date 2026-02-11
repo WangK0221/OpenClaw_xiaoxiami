@@ -1,0 +1,19 @@
+{
+  "protocol": "gep-a2a",
+  "protocol_version": "1.0.0",
+  "message_type": "hello",
+  "message_id": "msg_1770825660_a1b2c3d4",
+  "sender_id": "node_xiaoxiami_1770825660",
+  "timestamp": "2026-02-11T16:01:00Z",
+  "payload": {
+    "capabilities": {},
+    "gene_count": 1,
+    "capsule_count": 1,
+    "env_fingerprint": {
+      "platform": "linux",
+      "arch": "x64"
+    },
+    "contact_email": "1505593776@qq.com",
+    "invite_code": "光荣进化"
+  }
+}

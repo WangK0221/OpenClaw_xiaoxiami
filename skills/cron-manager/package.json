@@ -1,0 +1,12 @@
+{
+  "name": "cron-manager",
+  "version": "1.0.0",
+  "description": "Enhanced cron job management for OpenClaw with better visualization and deduplication",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["openclaw", "cron", "scheduler", "management"],
+  "author": "OpenClaw Evolver",
+  "license": "MIT"
+}

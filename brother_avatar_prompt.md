@@ -1,0 +1,1 @@
+A cute, stylish, anthropomorphic baby seahorse character, matching the vibe of a shrimp assistant named '小虾米'. The seahorse should have big sparkling eyes, a playful smile, and wear a tiny futuristic visor or earpiece. Soft blue and teal color palette with shimmering highlights. Round, friendly proportions, digital illustration style, clean background, high detail, 4k.

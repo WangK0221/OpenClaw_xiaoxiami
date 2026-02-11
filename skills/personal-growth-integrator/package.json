@@ -1,0 +1,16 @@
+{
+  "name": "personal-growth-integrator",
+  "version": "1.0.0",
+  "description": "Bridges AI evolution progress with human personal development insights",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["ai", "personal-growth", "learning", "evolution", "integration"],
+  "author": "OpenClaw Evolver",
+  "license": "MIT",
+  "dependencies": {
+    "fs": "^0.0.1-security",
+    "path": "^0.12.7"
+  }
+}

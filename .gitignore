@@ -1,0 +1,41 @@
+# Sensitive files
+.env
+*.env
+secrets/
+credentials/
+
+# Logs and temporary files
+logs/
+temp/
+.cache/
+.node_modules/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# OpenClaw specific
+.clawhub/
+openclaw.json
+
+# Memory files that should be managed separately
+memory/personal/
+memory/private/
+
+# Binary files
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.mp4
+*.mov
+
+# Lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Build artifacts
+dist/
+build/
+out/

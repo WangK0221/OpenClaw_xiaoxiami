@@ -1,0 +1,26 @@
+{
+  "currentWeek": 1,
+  "completedModules": [],
+  "upcomingModules": [
+    "基础能力强化",
+    "高级工具掌握",
+    "创新思维训练",
+    "跨领域整合"
+  ],
+  "lastUpdated": "2026-02-12T01:15:00Z",
+  "metrics": {
+    "knowledgeGained": 0,
+    "skillsMastered": 0,
+    "userSatisfaction": 0
+  },
+  "2026-02-11": {
+    "tasks": [],
+    "completed": true,
+    "completion_time": "2026-02-11T17:02:13.484Z",
+    "focus_areas": [
+      "实用技能",
+      "技术能力"
+    ],
+    "duration_minutes": 30
+  }
+}
