@@ -1,0 +1,19 @@
+{
+  "version": "1.0.0",
+  "toolPaths": {
+    "openclaw": [
+      "/usr/local/bin/openclaw",
+      "/home/admin/.npm-global/bin/openclaw", 
+      "/opt/openclaw/bin/openclaw",
+      "/usr/bin/openclaw"
+    ],
+    "node": [
+      "/usr/bin/node",
+      "/usr/local/bin/node",
+      "/opt/node/bin/node"
+    ]
+  },
+  "fallbackBehavior": "error",
+  "cachePaths": true,
+  "cacheTtlMs": 300000
+}

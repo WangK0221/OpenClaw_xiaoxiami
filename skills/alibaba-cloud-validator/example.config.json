@@ -1,0 +1,14 @@
+{
+  "alibabaCloud": {
+    "enabled": true,
+    "apiKey": "your-api-key-here",
+    "fallbackModel": "google/gemini-2.0-flash-001",
+    "timeoutMs": 5000,
+    "retryAttempts": 2
+  },
+  "validation": {
+    "checkOnStartup": true,
+    "checkIntervalMinutes": 60,
+    "logLevel": "warn"
+  }
+}

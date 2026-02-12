@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "name": {"type": "string"},
+          "command": {"type": "string"},
+          "schedule": {
+            "type": "object",
+            "properties": {
+              "type": {"type": "string", "enum": ["interval", "cron", "heartbeat"]},
+              "intervalMs": {"type": "integer", "minimum": 1000},
+              "cron": {"type": "string"},
+              "enabled": {"type": "boolean"}
+            },
+            "required": ["type", "enabled"]
+          },
+          "timeoutMs": {"type": "integer", "minimum": 1000, "default": 30000},
+          "retry": {
+            "type": "object",
+            "properties": {
+              "enabled": {"type": "boolean"},
+              "maxAttempts": {"type": "integer", "minimum": 1, "maximum": 5, "default": 3},
+              "backoffMs": {"type": "integer", "minimum": 1000, "default": 5000}
+            }
+          }
+        },
+        "required": ["id", "name", "command", "schedule"]
+      }
+    },
+    "global": {
+      "type": "object",
+      "properties": {
+        "maxConcurrentTasks": {"type": "integer", "minimum": 1, "maximum": 20, "default": 5},
+        "logLevel": {"type": "string", "enum": ["debug", "info", "warn", "error"], "default": "info"}
+      }
+    }
+  },
+  "required": ["tasks"]
+}

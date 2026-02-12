@@ -1,0 +1,12 @@
+{
+  "name": "alibaba-cloud-validator",
+  "version": "1.0.0",
+  "description": "Validates Alibaba Cloud configuration and provides graceful fallbacks for missing credentials",
+  "main": "validator.js",
+  "scripts": {
+    "test": "node test-integration.js"
+  },
+  "keywords": ["openclaw", "alibaba-cloud", "validation", "fallback"],
+  "author": "OpenClaw Evolver",
+  "license": "MIT"
+}

@@ -1,0 +1,12 @@
+{
+  "name": "skill-installation-manager",
+  "version": "1.0.0",
+  "description": "Manages ClawHub skill installations with proper error handling and validation",
+  "main": "installManager.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["skills", "installation", "clawhub", "management"],
+  "author": "OpenClaw Evolution Engine",
+  "license": "MIT"
+}

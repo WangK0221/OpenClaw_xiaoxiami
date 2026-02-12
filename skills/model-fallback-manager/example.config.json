@@ -1,0 +1,17 @@
+{
+  "fallbackOrder": [
+    "google/gemini-2.0-flash-001",
+    "alibaba-cloud/qwen3-max-2026-01-23"
+  ],
+  "healthCheck": {
+    "enabled": true,
+    "intervalMinutes": 5,
+    "timeoutMs": 10000
+  },
+  "errorHandling": {
+    "maxRetries": 3,
+    "retryDelayMs": 1000,
+    "logErrors": true
+  },
+  "autoDisableFailedProviders": true
+}

@@ -1,0 +1,21 @@
+{
+  "version": "1.0.0",
+  "optimization": {
+    "enabled": true,
+    "quietHours": {
+      "enabled": true,
+      "startHour": 23,
+      "endHour": 8
+    },
+    "workDetection": {
+      "enabled": true,
+      "checkFiles": ["memory_bridge.js", "deploy_to_github.sh"],
+      "checkDirectories": ["skills/"]
+    },
+    "rateLimiting": {
+      "enabled": true,
+      "minIntervalMinutes": 15,
+      "maxDailyExecutions": 96
+    }
+  }
+}

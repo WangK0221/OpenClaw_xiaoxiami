@@ -1,0 +1,27 @@
+{
+  "tasks": [
+    {
+      "name": "memory_sync",
+      "command": "node memory_bridge.js",
+      "schedule": "every_5m",
+      "description": "Sync memory to RECENT_EVENTS.md"
+    },
+    {
+      "name": "learning_plan_check", 
+      "command": "node skills/learning-plan/execute_plan.js",
+      "schedule": "daily_0900",
+      "description": "Execute learning plan evaluation"
+    },
+    {
+      "name": "github_deploy",
+      "command": "./deploy_to_github.sh",
+      "schedule": "every_30m",
+      "description": "Check and deploy to GitHub"
+    }
+  ],
+  "schedules": {
+    "every_5m": { "intervalMinutes": 5 },
+    "every_30m": { "intervalMinutes": 30 },
+    "daily_0900": { "cron": "0 9 * * *" }
+  }
+}

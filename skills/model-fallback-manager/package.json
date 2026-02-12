@@ -1,0 +1,12 @@
+{
+  "name": "model-fallback-manager",
+  "version": "1.0.0",
+  "description": "Manages model fallbacks and handles authentication errors gracefully",
+  "main": "fallbackManager.js",
+  "scripts": {
+    "test": "node test-integration.js"
+  },
+  "keywords": ["openclaw", "model", "fallback", "alibaba-cloud", "error-handling"],
+  "author": "OpenClaw Evolver",
+  "license": "MIT"
+}

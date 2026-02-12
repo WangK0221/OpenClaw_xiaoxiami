@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "description": "Whether LLM error handling is enabled"
+    },
+    "maxRetries": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5,
+      "description": "Maximum number of retry attempts for failed LLM calls"
+    },
+    "retryDelayMs": {
+      "type": "integer",
+      "minimum": 100,
+      "maximum": 10000,
+      "description": "Delay between retry attempts in milliseconds"
+    },
+    "fallbackModels": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of fallback models to try when primary model fails"
+    },
+    "errorPatterns": {
+      "type": "object",
+      "properties": {
+        "rateLimit": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "invalidRequest": {
+          "type": "array", 
+          "items": {"type": "string"}
+        },
+        "authentication": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      },
+      "description": "Error patterns to match for specific handling"
+    },
+    "logLevel": {
+      "type": "string",
+      "enum": ["silent", "errors", "warnings", "all"],
+      "description": "Level of logging for error handling"
+    }
+  },
+  "required": ["enabled", "maxRetries", "retryDelayMs", "fallbackModels", "errorPatterns", "logLevel"]
+}

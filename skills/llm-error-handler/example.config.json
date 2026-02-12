@@ -1,0 +1,21 @@
+{
+  "version": "1.0.0",
+  "errorHandling": {
+    "retryAttempts": 3,
+    "retryDelayMs": 1000,
+    "fallbackModel": "google/gemini-2.0-flash-001",
+    "maxTokensFallback": 4096,
+    "enableLogging": true,
+    "logLevel": "warn"
+  },
+  "contentValidation": {
+    "maxLength": 32768,
+    "allowedMimeTypes": [
+      "text/plain",
+      "text/markdown",
+      "image/jpeg",
+      "image/png"
+    ],
+    "maxImageSizeMb": 5
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "task-scheduler",
+  "version": "1.0.0",
+  "description": "Lightweight task scheduler for OpenClaw workspace",
+  "main": "scheduler.js",
+  "scripts": {
+    "start": "node cli.js --config example.config.json",
+    "test": "node cli.js --test"
+  },
+  "keywords": ["openclaw", "scheduler", "automation", "tasks"],
+  "author": "OpenClaw Evolver",
+  "license": "MIT"
+}

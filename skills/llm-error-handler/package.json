@@ -1,0 +1,12 @@
+{
+  "name": "llm-error-handler",
+  "version": "1.0.0",
+  "description": "Handles recurring LLM errors with graceful fallbacks and retry mechanisms",
+  "main": "errorHandler.js",
+  "scripts": {
+    "test": "node test-integration.js"
+  },
+  "keywords": ["llm", "error-handling", "gemini", "fallback", "retry"],
+  "author": "OpenClaw Evolver",
+  "license": "MIT"
+}

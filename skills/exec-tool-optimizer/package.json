@@ -1,0 +1,12 @@
+{
+  "name": "exec-tool-optimizer",
+  "version": "1.0.0",
+  "description": "Optimizes exec tool usage by handling PATH resolution and providing better error handling",
+  "main": "optimizer.js",
+  "scripts": {
+    "test": "node test-integration.js"
+  },
+  "keywords": ["openclaw", "exec", "optimizer", "path", "tool"],
+  "author": "OpenClaw Evolver",
+  "license": "MIT"
+}

@@ -1,0 +1,12 @@
+{
+  "name": "tool-path-resolver",
+  "version": "1.0.0",
+  "description": "Resolves PATH issues for exec tool calls by ensuring proper binary discovery",
+  "main": "pathResolver.js",
+  "scripts": {
+    "test": "node test-integration.js"
+  },
+  "keywords": ["openclaw", "path", "resolver", "exec", "tools"],
+  "author": "OpenClaw Evolver",
+  "license": "MIT"
+}

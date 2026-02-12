@@ -1,0 +1,25 @@
+{
+  "version": "1.0.0",
+  "tasks": [
+    {
+      "id": "task_1770861966879",
+      "enabled": true,
+      "name": "heartbeat-test",
+      "command": "echo \"Heartbeat task executed\"",
+      "schedule": {
+        "type": "interval",
+        "interval": 60
+      }
+    },
+    {
+      "id": "task_1770861974908",
+      "enabled": true,
+      "name": "heartbeat-test",
+      "command": "echo \"Heartbeat task executed\"",
+      "schedule": {
+        "type": "interval",
+        "interval": 60
+      }
+    }
+  ]
+}

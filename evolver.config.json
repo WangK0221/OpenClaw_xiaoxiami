@@ -1,0 +1,14 @@
+{
+  "loop": {
+    "enabled": true,
+    "interval": 60000,
+    "maxCycles": 100
+  },
+  "reporting": {
+    "enabled": true,
+    "target": "wrapper"
+  },
+  "memory": {
+    "path": "/home/admin/.openclaw/workspace/skills/evolver/memory"
+  }
+}

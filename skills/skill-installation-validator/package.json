@@ -1,0 +1,12 @@
+{
+  "name": "skill-installation-validator",
+  "version": "1.0.0",
+  "description": "Validates skill installation attempts to prevent errors from invalid skill names or sources",
+  "main": "validator.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["openclaw", "skill", "validation", "installation"],
+  "author": "OpenClaw Evolution Engine",
+  "license": "MIT"
+}

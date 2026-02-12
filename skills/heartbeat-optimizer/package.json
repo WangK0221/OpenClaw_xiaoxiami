@@ -1,0 +1,12 @@
+{
+  "name": "heartbeat-optimizer",
+  "version": "1.0.0",
+  "description": "Intelligent heartbeat optimization for OpenClaw to reduce unnecessary executions",
+  "main": "optimizer.js",
+  "scripts": {
+    "test": "node test-integration.js"
+  },
+  "keywords": ["openclaw", "heartbeat", "optimization", "efficiency"],
+  "author": "OpenClaw Evolver",
+  "license": "MIT"
+}

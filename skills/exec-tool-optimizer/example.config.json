@@ -1,0 +1,17 @@
+{
+  "version": "1.0.0",
+  "execPaths": [
+    "/usr/local/bin",
+    "/usr/bin",
+    "/bin",
+    "/home/admin/.npm-global/bin",
+    "/home/admin/.openclaw/bin"
+  ],
+  "fallbackPaths": [
+    "/opt/openclaw/bin",
+    "/usr/local/openclaw/bin"
+  ],
+  "timeoutMs": 60000,
+  "retryAttempts": 2,
+  "logErrors": true
+}

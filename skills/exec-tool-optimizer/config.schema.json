@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Configuration version"
+    },
+    "pathResolution": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable PATH resolution optimization"
+        },
+        "fallbackPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Fallback paths to search for executables"
+        },
+        "cachePaths": {
+          "type": "boolean",
+          "description": "Cache resolved paths for performance"
+        }
+      },
+      "required": ["enabled", "fallbackPaths", "cachePaths"]
+    },
+    "errorHandling": {
+      "type": "object",
+      "properties": {
+        "retryOnEnoent": {
+          "type": "boolean",
+          "description": "Retry command with expanded PATH on ENOENT errors"
+        },
+        "maxRetries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5,
+          "description": "Maximum number of retries for PATH resolution"
+        },
+        "fallbackToSystem": {
+          "type": "boolean",
+          "description": "Fallback to system PATH if custom paths fail"
+        }
+      },
+      "required": ["retryOnEnoent", "maxRetries", "fallbackToSystem"]
+    }
+  },
+  "required": ["version", "pathResolution", "errorHandling"]
+}

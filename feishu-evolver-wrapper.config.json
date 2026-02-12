@@ -1,0 +1,19 @@
+{
+  "report": {
+    "enabled": true,
+    "channel": "feishu",
+    "target": "ou_e3d4815bb54605113207ff0d0a9fd72e",
+    "format": "card",
+    "autoRestart": true
+  },
+  "monitoring": {
+    "enabled": true,
+    "healthCheckInterval": 30000,
+    "maxRestarts": 5,
+    "autoRestart": true
+  },
+  "integration": {
+    "evolverPath": "/home/admin/.openclaw/workspace/skills/evolver",
+    "workspacePath": "/home/admin/.openclaw/workspace"
+  }
+}

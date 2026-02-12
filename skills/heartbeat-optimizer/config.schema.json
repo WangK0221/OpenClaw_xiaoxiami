@@ -1,0 +1,72 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Heartbeat Optimizer Configuration",
+  "description": "Configuration for intelligent heartbeat execution optimization",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Configuration version"
+    },
+    "optimization": {
+      "type": "object",
+      "properties": {
+        "skip_empty_heartbeats": {
+          "type": "boolean",
+          "description": "Skip heartbeat execution when no tasks need to run",
+          "default": true
+        },
+        "min_interval_seconds": {
+          "type": "integer",
+          "description": "Minimum interval between actual executions (seconds)",
+          "minimum": 30,
+          "default": 300
+        },
+        "quiet_hours": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "start_hour": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 23,
+              "default": 23
+            },
+            "end_hour": {
+              "type": "integer", 
+              "minimum": 0,
+              "maximum": 23,
+              "default": 8
+            }
+          },
+          "required": ["enabled", "start_hour", "end_hour"]
+        }
+      },
+      "required": ["skip_empty_heartbeats", "min_interval_seconds", "quiet_hours"]
+    },
+    "task_sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["task_scheduler", "heartbeat_file", "custom"]
+          },
+          "path": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": ["type", "path"]
+      }
+    }
+  },
+  "required": ["version", "optimization", "task_sources"]
+}

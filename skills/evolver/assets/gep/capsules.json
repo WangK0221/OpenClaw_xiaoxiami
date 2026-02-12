@@ -353,6 +353,59 @@
         "eligible_to_broadcast": false
       },
       "asset_id": "sha256:a60e4f59f0582bf966b7ead4114efeb2af2bcdd6f7e2d844baddab375c942e9c"
+    },
+    {
+      "type": "Capsule",
+      "schema_version": "1.5.0",
+      "id": "capsule_1770920397635",
+      "trigger": [
+        "errsig:**TOOLRESULT**: { \"status\": \"error\", \"tool\": \"exec\", \"error\": \"- Resolving autogame-17/skills_pack.tar.gz\\n✖ Skill not found\\nError: Skill not found\\n\\nCommand exited with code 1\" }",
+        "recurring_error",
+        "recurring_errsig(4x):\"status\": \"error\", \"tool\": \"exec\", \"error\": \"Command exited with code 1\" ",
+        "user_feature_request",
+        "high_tool_usage:exec",
+        "repeated_tool_usage:exec"
+      ],
+      "gene": "gene_gep_repair_from_errors",
+      "summary": "固化：gene_gep_repair_from_errors 命中信号 errsig:**TOOLRESULT**: { \"status\": \"error\", \"tool\": \"exec\", \"error\": \"- Resolving autogame-17/skills_pack.tar.gz\\n✖ Skill not found\\nError: Skill not found\\n\\nCommand exited with code 1\" }, recurring_error, recurring_errsig(4x):\"status\": \"error\", \"tool\": \"exec\", \"error\": \"Command exited with code 1\" , user_feature_request, high_tool_usage:exec, repeated_tool_usage:exec，变更 10 文件 / 1019 行。",
+      "confidence": 0.85,
+      "blast_radius": {
+        "files": 11,
+        "lines": 1123
+      },
+      "outcome": {
+        "status": "success",
+        "score": 0.85
+      },
+      "success_streak": 2,
+      "env_fingerprint": {
+        "node_version": "v24.13.0",
+        "platform": "linux",
+        "arch": "x64",
+        "os_release": "5.10.134-19.2.al8.x86_64",
+        "evolver_version": "1.10.2",
+        "cwd": "/home/admin/.openclaw/workspace/skills/evolver",
+        "captured_at": "2026-02-12T18:37:30.992Z"
+      },
+      "metadata": {
+        "author": "oc_c45ee8ef6425bbeeeb42b29e7fcecc5c",
+        "tags": [
+          "errsig:**TOOLRESULT**: { \"status\": \"error\", \"tool\": \"exec\", \"error\": \"- Resolving autogame-17/skills_pack.tar.gz\\n✖ Skill not found\\nError: Skill not found\\n\\nCommand exited with code 1\" }",
+          "protocol_drift",
+          "recurring_error",
+          "recurring_errsig(4x):\"status\": \"error\", \"tool\": \"exec\", \"error\": \"Command exited with code 1\" ",
+          "user_feature_request"
+        ],
+        "created_at": "2026-02-12T18:37:31.069Z"
+      },
+      "performance_metrics": {
+        "reuse_potential": "high",
+        "blast_efficiency": 102.1
+      },
+      "a2a": {
+        "eligible_to_broadcast": false
+      },
+      "asset_id": "sha256:0ea4e51ee1144c2a9e454e637a2377e19952e4e701f82674f031cc49645adcdc"
     }
   ]
 }

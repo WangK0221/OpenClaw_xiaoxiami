@@ -1,0 +1,69 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "description": "Enable model fallback management"
+    },
+    "providers": {
+      "type": "object",
+      "description": "Provider-specific fallback configurations",
+      "properties": {
+        "alibaba-cloud": {
+          "type": "object",
+          "properties": {
+            "fallbackTo": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "List of fallback models/providers in order of preference"
+            },
+            "errorThreshold": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Number of consecutive errors before triggering fallback"
+            },
+            "autoRecover": {
+              "type": "boolean",
+              "description": "Automatically attempt to recover original provider after fallback"
+            }
+          }
+        },
+        "google": {
+          "type": "object",
+          "properties": {
+            "fallbackTo": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "List of fallback models/providers in order of preference"
+            },
+            "errorThreshold": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Number of consecutive errors before triggering fallback"
+            }
+          }
+        }
+      }
+    },
+    "logging": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable detailed logging for fallback events"
+        },
+        "logLevel": {
+          "type": "string",
+          "enum": ["debug", "info", "warn", "error"],
+          "description": "Log level for fallback manager"
+        }
+      }
+    }
+  },
+  "required": ["enabled", "providers"]
+}
