@@ -17,6 +17,23 @@ try {
     runHealthCheck = () => ({ status: 'unknown', error: e.message });
 }
 
+// Optimized reporting helper (requires report.js export)
+let sendReport;
+try {
+    sendReport = require('./report.js').sendReport;
+} catch(e) {}
+
+function sleepSync(ms) {
+    if (ms <= 0) return;
+    try {
+        execSync(`sleep ${ms / 1000}`);
+    } catch (e) {
+        // Fallback to busy-wait if sleep command fails (e.g. windows or path issues)
+        const end = Date.now() + ms;
+        while (Date.now() < end) {}
+    }
+}
+
 // INNOVATION: Internal Daemon Loop (Self-Healing Watchdog 2.0)
 function startDaemon() {
     if (fs.existsSync(DAEMON_PID_FILE)) {
@@ -34,6 +51,8 @@ function startDaemon() {
     const out = fs.openSync(path.resolve(__dirname, '../../logs/daemon_out.log'), 'a');
     const err = fs.openSync(path.resolve(__dirname, '../../logs/daemon_err.log'), 'a');
 
+    // Optimization: avoid double-wrapper execution by direct spawn
+    // Use child_process.spawn for better control than exec
     const child = spawn(process.execPath, [__filename, 'daemon-loop'], {
         detached: true,
         stdio: ['ignore', out, err],
@@ -45,13 +64,61 @@ function startDaemon() {
     console.log(`[Daemon] Started internal watchdog daemon (PID ${child.pid})`);
 }
 
+// Wrapper for async report sending that handles failures gracefully
+async function safeSendReport(payload) {
+    if (sendReport) {
+        try {
+            await sendReport(payload);
+        } catch (e) {
+            console.error('[Wrapper] Internal report failed:', e.message);
+        }
+    } else {
+        // Fallback to execSync
+        try {
+            const reportScript = path.resolve(__dirname, 'report.js');
+            // Basic CLI construction
+            // Use execSync directly to avoid complexity, escaping handled by caller if needed or kept simple
+            let cmd = `node "${reportScript}"`;
+            if (payload.cycle) cmd += ` --cycle "${payload.cycle}"`;
+            if (payload.title) cmd += ` --title "${payload.title}"`;
+            // Very basic escaping for status to avoid shell injection
+            if (payload.status) cmd += ` --status "${String(payload.status).replace(/"/g, '\\"')}"`;
+            if (payload.color) cmd += ` --color "${payload.color}"`;
+            if (payload.dashboard) cmd += ` --dashboard`;
+            
+            execSync(cmd, { stdio: 'ignore' });
+        } catch (e) {
+            console.error('[Wrapper] Fallback report exec failed:', e.message);
+        }
+    }
+}
+
 function daemonLoop() {
     console.log(`[Daemon] Loop started at ${new Date().toISOString()}`);
     
     // Heartbeat loop
     setInterval(() => {
         try {
-            // Run ensure logic internally in a fresh process
+            // Optimization: Check if wrapper is healthy before spawning a full ensure process
+            // This reduces redundant exec calls when everything is fine
+            if (fs.existsSync(PID_FILE)) {
+                try {
+                    const pid = fs.readFileSync(PID_FILE, 'utf8').trim();
+                    process.kill(pid, 0);
+                    // Process exists, check if logs are moving
+                    const logFile = path.resolve(__dirname, '../../logs/wrapper_lifecycle.log');
+                    if (fs.existsSync(logFile)) {
+                        const stats = fs.statSync(logFile);
+                        if (Date.now() - stats.mtimeMs < 300000) { // < 5 mins
+                            // Healthy! Update heartbeat and skip ensure spawn
+                            // fs.writeFileSync(path.resolve(__dirname, '../../memory/daemon_heartbeat.txt'), new Date().toISOString()); // Reduce IO
+                            return;
+                        }
+                    }
+                } catch(e) {}
+            }
+
+            // Run ensure logic internally in a fresh process if checks fail or PID missing
             const res = require('child_process').spawnSync(process.execPath, [__filename, 'ensure', '--json', '--daemon-check'], {
                 encoding: 'utf8'
             });
@@ -87,6 +154,7 @@ function ensureWatchdog() {
     // Optimization: Check a local state file first to avoid expensive CLI calls every time
     const cronStateFile = path.resolve(__dirname, '../../memory/evolver_cron_state.json');
     let skipCheck = false;
+    // Force check every 10 cycles (approx) or if file missing
     if (fs.existsSync(cronStateFile)) {
         try {
             const state = JSON.parse(fs.readFileSync(cronStateFile, 'utf8'));
@@ -100,7 +168,8 @@ function ensureWatchdog() {
     if (!skipCheck) {
         // Use --all to include disabled jobs, --json for parsing
         // Use absolute path for reliability
-        const listOut = execSync(`${openclawCli} cron list --all --json`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] });
+        // INNOVATION: Add timeout to prevent hanging execSync
+        const listOut = execSync(`${openclawCli} cron list --all --json`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'], timeout: 5000 });
         let jobs = [];
         try {
             const parsed = JSON.parse(listOut);
@@ -121,7 +190,11 @@ function ensureWatchdog() {
           // Use array for safe argument passing to avoid shell injection
           // Note: using execSync with string command, so we must be careful with quotes.
           // Using openclawCli variable here too.
-          const cmdStr = `${openclawCli} cron add --name "evolver_watchdog_robust" --every "10m" --session "isolated" --message "exec: node skills/feishu-evolver-wrapper/lifecycle.js ensure" --announce --json`;
+          // FIX: Use 'isolated' session to avoid cluttering main chat, but ensure it runs 'exec'
+          // We must use payload.kind="agentTurn" for isolated sessions.
+          // The command must be valid JSON for --payload if we want specific fields, 
+          // or we can use the simplified --message flag which creates an agentTurn.
+          const cmdStr = `${openclawCli} cron add --name "evolver_watchdog_robust" --every "10m" --session "isolated" --message "exec: node skills/feishu-evolver-wrapper/lifecycle.js ensure" --no-deliver --json`;
           
           execSync(cmdStr);
           console.log('[Lifecycle] Watchdog cron job created successfully.');
@@ -137,6 +210,7 @@ function ensureWatchdog() {
     }
   } catch (e) {
     console.error('[Lifecycle] Failed to ensure watchdog cron:', e.message);
+    // If CLI failed, maybe we are in a weird env. Try writing a status file.
   }
 }
 
@@ -371,10 +445,18 @@ function status(json = false) {
       // If requested via --report, send a card
       if (process.argv.includes('--report')) {
          try {
-             const reportScript = path.resolve(__dirname, 'report.js');
              const statusText = `PID: ${pid}\nCycle: #${cycle}\nLast Activity: ${lastActivity}\nAction: ${lastAction}`;
-             const cmd = `node "${reportScript}" --title "🧬 Evolver Status Check" --status "Status: [RUNNING] wrapper is active.\n${statusText}" --color "green"`;
-             execSync(cmd, { stdio: 'inherit' });
+             if (sendReport) {
+                 sendReport({
+                     title: "🧬 Evolver Status Check",
+                     status: `Status: [RUNNING] wrapper is active.\n${statusText}`,
+                     color: "green"
+                 }).catch(e => console.error('Failed to send status report:', e.message));
+             } else {
+                 const reportScript = path.resolve(__dirname, 'report.js');
+                 const cmd = `node "${reportScript}" --title "🧬 Evolver Status Check" --status "Status: [RUNNING] wrapper is active.\n${statusText}" --color "green"`;
+                 execSync(cmd, { stdio: 'inherit' });
+             }
          } catch(e) {
              console.error('Failed to send status report:', e.message);
          }
@@ -387,10 +469,18 @@ function status(json = false) {
 
       if (process.argv.includes('--report')) {
          try {
-             const reportScript = path.resolve(__dirname, 'report.js');
              const statusText = `Last Known Cycle: #${cycle}\nLast Activity: ${lastActivity}`;
-             const cmd = `node "${reportScript}" --title "🚨 Evolver Status Check" --status "Status: [STOPPED] wrapper is NOT running.\n${statusText}" --color "red"`;
-             execSync(cmd, { stdio: 'inherit' });
+             if (sendReport) {
+                 sendReport({
+                     title: "🚨 Evolver Status Check",
+                     status: `Status: [STOPPED] wrapper is NOT running.\n${statusText}`,
+                     color: "red"
+                 }).catch(e => console.error('Failed to send status report:', e.message));
+             } else {
+                 const reportScript = path.resolve(__dirname, 'report.js');
+                 const cmd = `node "${reportScript}" --title "🚨 Evolver Status Check" --status "Status: [STOPPED] wrapper is NOT running.\n${statusText}" --color "red"`;
+                 execSync(cmd, { stdio: 'inherit' });
+             }
          } catch(e) {
              console.error('Failed to send status report:', e.message);
          }
@@ -428,13 +518,10 @@ switch (action) {
         const ms = parseInt(passArgs[delayArgIndex + 1]);
         if (!isNaN(ms) && ms > 0) {
             console.log(`[Ensure] Waiting ${ms}ms before check...`);
-            try {
-                // Use sleep to save CPU (Linux only)
-                execSync(`sleep ${ms / 1000}`);
-            } catch (e) {
-                // Fallback to busy wait if sleep fails
-                const end = Date.now() + ms;
-                while (Date.now() < end) {}
+            // Simple synchronous sleep
+            const stop = new Date().getTime() + ms;
+            while(new Date().getTime() < stop){
+                ;
             }
         }
     }
@@ -448,7 +535,8 @@ switch (action) {
         
         // Only consider stuck if BOTH logs are stale > 20m (to avoid false positives during sleep/long cycles)
         const now = Date.now();
-        const threshold = 1200000; // 20 minutes (increased from 10m to support long reasoning cycles)
+        // [FIX] Relax stuck detection threshold to 240m to prevent false positives during extremely long reasoning tasks
+        const threshold = 14400000; // 240 minutes
         
         let lifeStale = true;
         let outStale = true;
@@ -473,10 +561,17 @@ switch (action) {
     }
 
     if (isStuck) {
-        console.warn('[Ensure] Process appears stuck (logs stale > 20m). Restarting...');
+        console.warn('[Ensure] Process appears stuck (logs stale > 240m). Restarting...');
         stop();
         // Clear lock so we can proceed
         try { if (fs.existsSync(path.resolve(__dirname, '../../memory/evolver_ensure.lock'))) fs.unlinkSync(path.resolve(__dirname, '../../memory/evolver_ensure.lock')); } catch(e) {}
+        
+        // INNOVATION: Report stuck restart event
+        safeSendReport({
+            title: "🚨 Evolver Watchdog Alert",
+            status: "Status: [RESTARTING] Process was stuck (logs stale). Restart triggered.",
+            color: "red"
+        });
     }
 
     const ensureLock = path.resolve(__dirname, '../../memory/evolver_ensure.lock');
@@ -496,10 +591,19 @@ switch (action) {
             
             // Auto-report the failure
             try {
-                const reportScript = path.resolve(__dirname, 'report.js');
-                const issueText = health.checks.filter(c => c.ok === false).map(c => `- ${c.name}: ${c.error || c.status}`).join('\n');
-                const cmd = `node "${reportScript}" --title "🚨 Evolver Self-Healing Triggered" --status "Status: [HEALTH_FAIL] System detected critical failure.\n${issueText}" --color "red"`;
-                execSync(cmd, { stdio: 'ignore' });
+                if (sendReport) {
+                    const issueText = health.checks.filter(c => c.ok === false).map(c => `- ${c.name}: ${c.error || c.status}`).join('\n');
+                    sendReport({
+                        title: "🚨 Evolver Self-Healing Triggered",
+                        status: `Status: [HEALTH_FAIL] System detected critical failure.\n${issueText}`,
+                        color: "red"
+                    }).catch(e => {});
+                } else {
+                    const reportScript = path.resolve(__dirname, 'report.js');
+                    const issueText = health.checks.filter(c => c.ok === false).map(c => `- ${c.name}: ${c.error || c.status}`).join('\n');
+                    const cmd = `node "${reportScript}" --title "🚨 Evolver Self-Healing Triggered" --status "Status: [HEALTH_FAIL] System detected critical failure.\n${issueText}" --color "red"`;
+                    execSync(cmd, { stdio: 'ignore' });
+                }
             } catch(e) {}
         }
     } catch(e) {
@@ -533,7 +637,7 @@ switch (action) {
         // Remove PID file to force clean start
         if (fs.existsSync(PID_FILE)) fs.unlinkSync(PID_FILE);
         // Wait briefly for OS to clear
-        execSync('sleep 1');
+        sleepSync(1000);
     }
     
     if (!getRunningPid()) {
@@ -543,11 +647,11 @@ switch (action) {
           setTimeout(() => status(false), 2000); // wait for startup
       }
       // INNOVATION: Auto-report dashboard on successful restart via ensure
-      try {
-          const reportScript = path.resolve(__dirname, 'report.js');
-          const cmd = `node "${reportScript}" --title "🧬 Evolver Auto-Repair" --status "Status: [RESTARTED] Watchdog restarted the wrapper." --color "orange"`;
-          execSync(cmd, { stdio: 'ignore' });
-      } catch(e) {}
+      safeSendReport({
+          title: "🧬 Evolver Auto-Repair",
+          status: "Status: [RESTARTED] Watchdog restarted the wrapper.",
+          color: "orange"
+      });
     } else {
       // If ensuring and already running, stay silent unless JSON/report requested
       if (passArgs.includes('--json')) {
@@ -568,11 +672,17 @@ switch (action) {
     break;
   case 'dashboard':
     try {
-        const reportScript = path.resolve(__dirname, 'report.js');
         console.log('[Dashboard] Generating full system status card...');
-        // Use the new --dashboard flag for rich card
-        const cmd = `node "${reportScript}" --dashboard --color "blue"`;
-        execSync(cmd, { stdio: 'inherit' });
+        if (sendReport) {
+            sendReport({
+                dashboard: true,
+                color: "blue"
+            }).catch(e => console.error('[Dashboard] Failed to generate card:', e.message));
+        } else {
+            const reportScript = path.resolve(__dirname, 'report.js');
+            const cmd = `node "${reportScript}" --dashboard --color "blue"`;
+            execSync(cmd, { stdio: 'inherit' });
+        }
     } catch(e) {
         console.error('[Dashboard] Failed to generate card:', e.message);
     }

@@ -3,7 +3,7 @@ const path = require('path');
 const os = require('os');
 const { execSync } = require('child_process');
 const { getRepoRoot, getMemoryDir } = require('./gep/paths');
-const { extractSignals, analyzeRecentHistory } = require('./gep/signals');
+const { extractSignals } = require('./gep/signals');
 const {
   loadGenes,
   loadCapsules,
@@ -14,17 +14,18 @@ const {
   readRecentExternalCandidates,
 } = require('./gep/assetStore');
 const { selectGeneAndCapsule, matchPatternToSignals } = require('./gep/selector');
-const { buildGepPrompt } = require('./gep/prompt');
-const { resolveStrategy } = require('./gep/strategy');
+const { buildGepPrompt, buildReusePrompt, buildHubMatchedBlock } = require('./gep/prompt');
+const { hubSearch } = require('./gep/hubSearch');
 const { extractCapabilityCandidates, renderCandidatesPreview } = require('./gep/candidates');
+const memoryAdapter = require('./gep/memoryGraphAdapter');
 const {
-  getMemoryAdvice,
+  getAdvice: getMemoryAdvice,
   recordSignalSnapshot,
   recordHypothesis,
   recordAttempt,
-  recordOutcomeFromState,
+  recordOutcome: recordOutcomeFromState,
   memoryGraphPath,
-} = require('./gep/memoryGraph');
+} = memoryAdapter;
 const { readStateForSolidify, writeStateForSolidify } = require('./gep/solidify');
 const { buildMutation, isHighRiskMutationAllowed } = require('./gep/mutation');
 const { selectPersonalityForRun } = require('./gep/personality');
@@ -292,38 +293,16 @@ function checkSystemHealth() {
 }
 
 function getMutationDirective(logContent) {
-  const strategy = resolveStrategy();
+  // Signal hints derived from recent logs.
   const errorMatches = logContent.match(/\[ERROR|Error:|Exception:|FAIL|Failed|"isError":true/gi) || [];
   const errorCount = errorMatches.length;
   const isUnstable = errorCount > 2;
-
-  // Strategy-aware intent recommendation
-  var recommendedIntent;
-  if (strategy.name === 'repair-only') {
-    recommendedIntent = 'repair';
-  } else if (strategy.name === 'innovate' && !isUnstable) {
-    recommendedIntent = 'innovate';
-  } else if (isUnstable && strategy.repair >= 0.3) {
-    recommendedIntent = 'repair';
-  } else if (isUnstable) {
-    recommendedIntent = 'optimize';
-  } else {
-    // Stable system: pick based on strategy weights (highest weight wins)
-    var weights = [
-      { intent: 'innovate', w: strategy.innovate },
-      { intent: 'optimize', w: strategy.optimize },
-      { intent: 'repair', w: strategy.repair },
-    ];
-    weights.sort(function(a, b) { return b.w - a.w; });
-    recommendedIntent = weights[0].intent;
-  }
+  const recommendedIntent = isUnstable ? 'repair' : 'optimize';
 
   return `
 [Signal Hints]
 - recent_error_count: ${errorCount}
 - stability: ${isUnstable ? 'unstable' : 'stable'}
-- strategy: ${strategy.label} (${strategy.name})
-- target_allocation: ${Math.round(strategy.innovate * 100)}% innovate / ${Math.round(strategy.optimize * 100)}% optimize / ${Math.round(strategy.repair * 100)}% repair
 - recommended_intent: ${recommendedIntent}
 `;
 }
@@ -378,20 +357,38 @@ function getNextCycleId() {
 }
 
 function performMaintenance() {
+  // Auto-update check (rate-limited, non-fatal).
+  checkAndAutoUpdate();
+
   try {
     if (!fs.existsSync(AGENT_SESSIONS_DIR)) return;
 
-    // Count files
     const files = fs.readdirSync(AGENT_SESSIONS_DIR).filter(f => f.endsWith('.jsonl'));
-    if (files.length < 100) return; // Limit before cleanup
 
-    console.log(`[Maintenance] Found ${files.length} session logs. Archiving old ones...`);
+    // Clean up evolver's own hand sessions immediately.
+    // These are single-use executor sessions that must not accumulate,
+    // otherwise they pollute the agent's context and starve user conversations.
+    const evolverFiles = files.filter(f => f.startsWith('evolver_hand_'));
+    for (const f of evolverFiles) {
+      try {
+        fs.unlinkSync(path.join(AGENT_SESSIONS_DIR, f));
+      } catch (_) {}
+    }
+    if (evolverFiles.length > 0) {
+      console.log(`[Maintenance] Cleaned ${evolverFiles.length} evolver hand session(s).`);
+    }
+
+    // Archive old non-evolver sessions when count exceeds threshold.
+    const remaining = files.length - evolverFiles.length;
+    if (remaining < 100) return;
+
+    console.log(`[Maintenance] Found ${remaining} session logs. Archiving old ones...`);
 
     const ARCHIVE_DIR = path.join(AGENT_SESSIONS_DIR, 'archive');
     if (!fs.existsSync(ARCHIVE_DIR)) fs.mkdirSync(ARCHIVE_DIR, { recursive: true });
 
-    // Sort by time (oldest first)
     const fileStats = files
+      .filter(f => !f.startsWith('evolver_hand_'))
       .map(f => {
         try {
           return { name: f, time: fs.statSync(path.join(AGENT_SESSIONS_DIR, f)).mtime.getTime() };
@@ -402,7 +399,6 @@ function performMaintenance() {
       .filter(Boolean)
       .sort((a, b) => a.time - b.time);
 
-    // Keep last 50 files, archive the rest
     const toArchive = fileStats.slice(0, fileStats.length - 50);
 
     for (const file of toArchive) {
@@ -410,9 +406,96 @@ function performMaintenance() {
       const newPath = path.join(ARCHIVE_DIR, file.name);
       fs.renameSync(oldPath, newPath);
     }
-    console.log(`[Maintenance] Archived ${toArchive.length} logs to ${ARCHIVE_DIR}`);
+    if (toArchive.length > 0) {
+      console.log(`[Maintenance] Archived ${toArchive.length} logs to ${ARCHIVE_DIR}`);
+    }
   } catch (e) {
     console.error(`[Maintenance] Error: ${e.message}`);
+  }
+}
+
+// --- Auto-update: check for newer versions of evolver and wrapper on ClawHub ---
+function checkAndAutoUpdate() {
+  try {
+    // Read config: default autoUpdate = true
+    const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
+    let autoUpdate = true;
+    let intervalHours = 6;
+    try {
+      if (fs.existsSync(configPath)) {
+        const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        if (cfg.evolver && cfg.evolver.autoUpdate === false) autoUpdate = false;
+        if (cfg.evolver && Number.isFinite(Number(cfg.evolver.autoUpdateIntervalHours))) {
+          intervalHours = Number(cfg.evolver.autoUpdateIntervalHours);
+        }
+      }
+    } catch (_) {}
+
+    if (!autoUpdate) return;
+
+    // Rate limit: only check once per interval
+    const stateFile = path.join(MEMORY_DIR, 'evolver_update_check.json');
+    const now = Date.now();
+    const intervalMs = intervalHours * 60 * 60 * 1000;
+    try {
+      if (fs.existsSync(stateFile)) {
+        const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+        if (state.lastCheckedAt && (now - new Date(state.lastCheckedAt).getTime()) < intervalMs) {
+          return; // Too soon, skip
+        }
+      }
+    } catch (_) {}
+
+    // Find clawhub binary
+    let clawhubBin = null;
+    const candidates = ['clawhub', path.join(os.homedir(), '.npm-global/bin/clawhub'), '/usr/local/bin/clawhub'];
+    for (const c of candidates) {
+      try {
+        if (c === 'clawhub') {
+          execSync('which clawhub', { stdio: 'ignore', timeout: 3000 });
+          clawhubBin = 'clawhub';
+          break;
+        }
+        if (fs.existsSync(c)) { clawhubBin = c; break; }
+      } catch (_) {}
+    }
+    if (!clawhubBin) return; // No clawhub CLI available
+
+    // Update evolver and feishu-evolver-wrapper
+    const slugs = ['evolver', 'feishu-evolver-wrapper'];
+    let updated = false;
+    for (const slug of slugs) {
+      try {
+        const out = execSync(`${clawhubBin} update ${slug} --force`, {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+          timeout: 30000,
+          cwd: path.resolve(REPO_ROOT, '..'),
+        });
+        if (out && !out.includes('already up to date') && !out.includes('not installed')) {
+          console.log(`[AutoUpdate] ${slug}: ${out.trim().split('\n').pop()}`);
+          updated = true;
+        }
+      } catch (e) {
+        // Non-fatal: update failure should never block evolution
+      }
+    }
+
+    // Write state
+    try {
+      const stateData = {
+        lastCheckedAt: new Date(now).toISOString(),
+        updated,
+      };
+      fs.writeFileSync(stateFile, JSON.stringify(stateData, null, 2) + '\n');
+    } catch (_) {}
+
+    if (updated) {
+      console.log('[AutoUpdate] Skills updated. Changes will take effect on next wrapper restart.');
+    }
+  } catch (e) {
+    // Entire auto-update is non-fatal
+    console.log(`[AutoUpdate] Check failed (non-fatal): ${e.message}`);
   }
 }
 
@@ -422,9 +505,35 @@ function sleepMs(ms) {
   return new Promise(resolve => setTimeout(resolve, n));
 }
 
+// Check how many agent sessions are actively being processed (modified in the last N minutes).
+// If the agent is busy with user conversations, evolver should back off.
+function getRecentActiveSessionCount(windowMs) {
+  try {
+    if (!fs.existsSync(AGENT_SESSIONS_DIR)) return 0;
+    const now = Date.now();
+    const w = Number.isFinite(windowMs) ? windowMs : 10 * 60 * 1000;
+    return fs.readdirSync(AGENT_SESSIONS_DIR)
+      .filter(f => f.endsWith('.jsonl') && !f.includes('.lock') && !f.startsWith('evolver_hand_'))
+      .filter(f => {
+        try { return (now - fs.statSync(path.join(AGENT_SESSIONS_DIR, f)).mtimeMs) < w; } catch (_) { return false; }
+      }).length;
+  } catch (_) { return 0; }
+}
+
 async function run() {
   const bridgeEnabled = String(process.env.EVOLVE_BRIDGE || '').toLowerCase() !== 'false';
   const loopMode = ARGS.includes('--loop') || ARGS.includes('--mad-dog') || String(process.env.EVOLVE_LOOP || '').toLowerCase() === 'true';
+
+  // SAFEGUARD: If the agent has too many active user sessions, back off.
+  // Evolver must not starve user conversations by consuming model concurrency.
+  const QUEUE_MAX = Number.parseInt(process.env.EVOLVE_AGENT_QUEUE_MAX || '10', 10);
+  const QUEUE_BACKOFF_MS = Number.parseInt(process.env.EVOLVE_AGENT_QUEUE_BACKOFF_MS || '60000', 10);
+  const activeUserSessions = getRecentActiveSessionCount(10 * 60 * 1000);
+  if (activeUserSessions > QUEUE_MAX) {
+    console.log(`[Evolver] Agent has ${activeUserSessions} active user sessions (max ${QUEUE_MAX}). Backing off ${QUEUE_BACKOFF_MS}ms to avoid starving user conversations.`);
+    await sleepMs(QUEUE_BACKOFF_MS);
+    return;
+  }
 
   // Loop gating: do not start a new cycle until the previous one is solidified.
   // This prevents wrappers from "fast-cycling" the Brain without waiting for the Hand to finish.
@@ -641,6 +750,8 @@ async function run() {
     recordOutcomeFromState({ signals, observations });
   } catch (e) {
     // If we can't read/write memory graph, refuse to evolve (no "memoryless evolution").
+    console.error(`[MemoryGraph] Outcome write failed: ${e.message}`);
+    console.error(`[MemoryGraph] Refusing to evolve without causal memory. Target: ${memoryGraphPath()}`);
     throw new Error(`MemoryGraph Outcome write failed: ${e.message}`);
   }
 
@@ -648,6 +759,8 @@ async function run() {
   try {
     recordSignalSnapshot({ signals, observations });
   } catch (e) {
+    console.error(`[MemoryGraph] Signal snapshot write failed: ${e.message}`);
+    console.error(`[MemoryGraph] Refusing to evolve without causal memory. Target: ${memoryGraphPath()}`);
     throw new Error(`MemoryGraph Signal snapshot write failed: ${e.message}`);
   }
 
@@ -724,11 +837,27 @@ async function run() {
     }
   } catch (e) {}
 
+  // Search-First Evolution: query Hub for reusable solutions before local reasoning.
+  let hubHit = null;
+  try {
+    hubHit = await hubSearch(signals, { timeoutMs: 8000 });
+    if (hubHit && hubHit.hit) {
+      console.log(`[SearchFirst] Hub hit: asset=${hubHit.asset_id}, score=${hubHit.score}, mode=${hubHit.mode}`);
+    } else {
+      console.log(`[SearchFirst] No hub match (reason: ${hubHit && hubHit.reason ? hubHit.reason : 'unknown'}). Proceeding with local evolution.`);
+    }
+  } catch (e) {
+    console.log(`[SearchFirst] Hub search failed (non-fatal): ${e.message}`);
+    hubHit = { hit: false, reason: 'exception' };
+  }
+
   // Memory Graph reasoning: prefer high-confidence paths, suppress known low-success paths (unless drift is explicit).
   let memoryAdvice = null;
   try {
     memoryAdvice = getMemoryAdvice({ signals, genes, driftEnabled: IS_RANDOM_DRIFT });
   } catch (e) {
+    console.error(`[MemoryGraph] Read failed: ${e.message}`);
+    console.error(`[MemoryGraph] Refusing to evolve without causal memory. Target: ${memoryGraphPath()}`);
     throw new Error(`MemoryGraph Read failed: ${e.message}`);
   }
 
@@ -773,9 +902,7 @@ async function run() {
     Number(personalityState.creativity) >= 0.75 &&
     stableSuccess &&
     tailAvgScore >= 0.7;
-  const activeStrategy = resolveStrategy();
   const forceInnovation =
-    activeStrategy.name === 'innovate' ||
     String(process.env.FORCE_INNOVATION || process.env.EVOLVE_FORCE_INNOVATION || '').toLowerCase() === 'true';
   const mutationInnovateMode = !!IS_RANDOM_DRIFT || !!innovationPressure || !!forceInnovation;
   const mutationSignals = innovationPressure ? [...(Array.isArray(signals) ? signals : []), 'stable_success_plateau'] : signals;
@@ -818,7 +945,7 @@ async function run() {
   } catch (e) {
     console.error(`[MemoryGraph] Hypothesis write failed: ${e.message}`);
     console.error(`[MemoryGraph] Refusing to evolve without causal memory. Target: ${memoryGraphPath()}`);
-    process.exit(2);
+    throw new Error(`MemoryGraph Hypothesis write failed: ${e.message}`);
   }
 
   // Memory Graph: record the chosen causal path for this run. If this fails, refuse to output a mutation prompt.
@@ -838,7 +965,7 @@ async function run() {
   } catch (e) {
     console.error(`[MemoryGraph] Attempt write failed: ${e.message}`);
     console.error(`[MemoryGraph] Refusing to evolve without causal memory. Target: ${memoryGraphPath()}`);
-    process.exit(2);
+    throw new Error(`MemoryGraph Attempt write failed: ${e.message}`);
   }
 
   // Solidify state: capture minimal, auditable context for post-patch validation + asset write.
@@ -904,6 +1031,9 @@ async function run() {
             : [],
         drift: !!IS_RANDOM_DRIFT,
         selected_by: selectedBy,
+        source_type: hubHit && hubHit.hit ? 'reused' : 'generated',
+        reused_asset_id: hubHit && hubHit.hit ? (hubHit.asset_id || null) : null,
+        reused_source_node: hubHit && hubHit.hit ? (hubHit.source_node_id || null) : null,
         baseline_untracked: baselineUntracked,
         baseline_git_head: baselineHead,
         blast_radius_estimate: blastRadiusEstimate,
@@ -979,23 +1109,33 @@ Mutation directive:
 ${mutationDirective}
 `.trim();
 
-  // Analyze recent history for innovation cooldown
-  const historyAnalysis = analyzeRecentHistory(recentEvents);
+  // Build the prompt: in direct-reuse mode, use a minimal reuse prompt.
+  // In reference mode (or no hit), use the full GEP prompt with hub match injected.
+  const isDirectReuse = hubHit && hubHit.hit && hubHit.mode === 'direct';
+  const hubMatchedBlock = hubHit && hubHit.hit && hubHit.mode === 'reference'
+    ? buildHubMatchedBlock({ capsule: hubHit.match })
+    : null;
 
-  const prompt = buildGepPrompt({
-    nowIso: new Date().toISOString(),
-    context,
-    signals,
-    selector,
-    parentEventId: getLastEventId(),
-    selectedGene,
-    capsuleCandidates,
-    genesPreview,
-    capsulesPreview,
-    capabilityCandidatesPreview,
-    externalCandidatesPreview,
-    recentInnovationTargets: historyAnalysis.recentInnovationTargets || {},
-  });
+  const prompt = isDirectReuse
+    ? buildReusePrompt({
+        capsule: hubHit.match,
+        signals,
+        nowIso: new Date().toISOString(),
+      })
+    : buildGepPrompt({
+        nowIso: new Date().toISOString(),
+        context,
+        signals,
+        selector,
+        parentEventId: getLastEventId(),
+        selectedGene,
+        capsuleCandidates,
+        genesPreview,
+        capsulesPreview,
+        capabilityCandidatesPreview,
+        externalCandidatesPreview,
+        hubMatchedBlock,
+      });
 
   // Optional: emit a compact thought process block for wrappers (noise-controlled).
   const emitThought = String(process.env.EVOLVE_EMIT_THOUGHT_PROCESS || '').toLowerCase() === 'true';
@@ -1009,7 +1149,8 @@ ${mutationDirective}
       `selected_capsule: ${selectedCapsuleId ? String(selectedCapsuleId) : '(none)'}`,
       `mutation_category: ${mutation && mutation.category ? String(mutation.category) : '(none)'}`,
       `force_innovation: ${forceInnovation ? 'true' : 'false'}`,
-      `strategy: ${activeStrategy.label} (${activeStrategy.name})`,
+      `source_type: ${hubHit && hubHit.hit ? 'reused' : 'generated'}`,
+      `hub_reuse_mode: ${isDirectReuse ? 'direct' : hubMatchedBlock ? 'reference' : 'none'}`,
     ].join('\n');
     console.log(`[THOUGHT_PROCESS]\n${thought}\n[/THOUGHT_PROCESS]`);
   }
@@ -1055,7 +1196,7 @@ ${mutationDirective}
       '',
       'Loop chaining (only if you are running in loop mode): after solidify succeeds, print a sessions_spawn call to start the next loop run with a short delay.',
       'Example:',
-      'sessions_spawn({ task: "exec: sleep 3 && node index.js --loop", agentId: "main", cleanup: "delete", label: "gep_loop_next" })',
+      'sessions_spawn({ task: "exec: node skills/feishu-evolver-wrapper/lifecycle.js ensure", agentId: "main", cleanup: "delete", label: "gep_loop_next" })',
       '',
       'GEP protocol prompt (may be truncated here; prefer the prompt file if provided):',
       clip(prompt, 24000),

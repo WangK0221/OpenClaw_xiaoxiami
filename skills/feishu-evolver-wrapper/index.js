@@ -1,6 +1,9 @@
 const { execSync, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
+const { sleepSync } = require('./utils/sleep'); // New helper
+const { sendReport } = require('./report.js'); // Use optimized internal report function
 
 // [2026-02-03] WRAPPER REFACTOR: PURE PROXY
 // This wrapper now correctly delegates to the core 'evolver' plugin.
@@ -21,12 +24,7 @@ function sleepSeconds(sec) {
             try { fs.unlinkSync(wakeFile); } catch (e) {}
             return;
         }
-        try {
-            execSync(`sleep ${interval}`);
-        } catch (_) {
-            const waitStart = Date.now();
-            while (Date.now() - waitStart < interval * 1000) {}
-        }
+        sleepSync(interval * 1000);
     }
 }
 
@@ -124,18 +122,59 @@ function isGenericStatusText(text) {
     return false;
 }
 
-function buildFallbackStatus(lang, cycleTag, gitInfo) {
+function buildFallbackStatus(lang, cycleTag, gitInfo, latestEvent) {
+    const evt = latestEvent || readLatestEvolutionEvent();
+    const intent = evt && evt.intent ? String(evt.intent) : null;
+    const signals = evt && Array.isArray(evt.signals) ? evt.signals.slice(0, 3).map(String) : [];
+    const geneId = evt && Array.isArray(evt.genes_used) && evt.genes_used.length ? String(evt.genes_used[0]) : null;
+    const mutation = evt && evt.meta && evt.meta.mutation ? evt.meta.mutation : null;
+    const expectedEffect = mutation && mutation.expected_effect ? String(mutation.expected_effect) : null;
+    const blastFiles = evt && evt.blast_radius ? evt.blast_radius.files : null;
+    const blastLines = evt && evt.blast_radius ? evt.blast_radius.lines : null;
     const hasGit = !!(gitInfo && gitInfo.shortHash);
+
     if (lang === 'zh') {
-        if (hasGit) {
-            return `状态: [优化] 本轮进化已完成代码演化并提交 ${gitInfo.fileCount} 个文件，主要影响 ${gitInfo.areaStr}。`;
+        const intentLabel = intentLabelByLang(intent, 'zh');
+        const parts = [`状态: [${intentLabel}]`];
+        if (expectedEffect) {
+            parts.push(`目标：${expectedEffect}。`);
         }
-        return `状态: [修复] 本轮进化完成了执行与验证，但未产生可提交代码变更（无新增 diff）。`;
+        if (signals.length) {
+            parts.push(`触发信号：${signals.join(', ')}。`);
+        }
+        if (geneId) {
+            parts.push(`使用基因：${geneId}。`);
+        }
+        if (blastFiles != null) {
+            parts.push(`影响范围：${blastFiles} 个文件 / ${blastLines || 0} 行。`);
+        }
+        if (hasGit) {
+            parts.push(`提交：${gitInfo.fileCount} 个文件，涉及 ${gitInfo.areaStr}。`);
+        } else {
+            parts.push(`无可提交代码变更。`);
+        }
+        return parts.join(' ');
+    }
+    const intentLabel = intentLabelByLang(intent, 'en');
+    const parts = [`Status: [${intentLabel}]`];
+    if (expectedEffect) {
+        parts.push(`Goal: ${expectedEffect}.`);
+    }
+    if (signals.length) {
+        parts.push(`Signals: ${signals.join(', ')}.`);
+    }
+    if (geneId) {
+        parts.push(`Gene: ${geneId}.`);
+    }
+    if (blastFiles != null) {
+        parts.push(`Blast radius: ${blastFiles} files / ${blastLines || 0} lines.`);
     }
     if (hasGit) {
-        return `Status: [OPTIMIZE] This evolution completed code changes and committed ${gitInfo.fileCount} files, mainly in ${gitInfo.areaStr}.`;
+        parts.push(`Committed ${gitInfo.fileCount} files in ${gitInfo.areaStr}.`);
+    } else {
+        parts.push(`No committable code diff.`);
     }
-    return 'Status: [REPAIR] This evolution completed execution and validation, but produced no committable code diff.';
+    return parts.join(' ');
 }
 
 function withOutcomeLine(statusText, success, lang) {
@@ -150,19 +189,116 @@ function withOutcomeLine(statusText, success, lang) {
     return `${enPrefix}${success ? 'SUCCESS' : 'FAILED'}\n${s}`;
 }
 
-function ensureDetailedStatus(rawText, lang, cycleTag, gitInfo) {
+function ensureDetailedStatus(rawText, lang, cycleTag, gitInfo, latestEvent) {
     const s = cleanStatusText(rawText);
-    if (!s || isGenericStatusText(s)) return buildFallbackStatus(lang, cycleTag, gitInfo);
+    if (!s || isGenericStatusText(s)) return buildFallbackStatus(lang, cycleTag, gitInfo, latestEvent);
     return s;
+}
+
+function readLatestEvolutionEvent() {
+    try {
+        const eventsFile = path.resolve(__dirname, '../../assets/gep/events.jsonl');
+        if (!fs.existsSync(eventsFile)) return null;
+        const lines = fs.readFileSync(eventsFile, 'utf8').split('\n').filter(Boolean);
+        for (let i = lines.length - 1; i >= 0; i--) {
+            try {
+                const obj = JSON.parse(lines[i]);
+                if (obj && obj.type === 'EvolutionEvent') return obj;
+            } catch (_) {}
+        }
+        return null;
+    } catch (_) {
+        return null;
+    }
+}
+
+function intentLabelByLang(intent, lang) {
+    const i = String(intent || '').toLowerCase();
+    if (lang === 'zh') {
+        if (i === 'innovate') return '创新';
+        if (i === 'optimize') return '优化';
+        return '修复';
+    }
+    if (i === 'innovate') return 'INNOVATION';
+    if (i === 'optimize') return 'OPTIMIZE';
+    return 'REPAIR';
+}
+
+function enforceStatusIntent(statusText, intent, lang) {
+    const s = cleanStatusText(statusText);
+    if (!intent) return s;
+    const label = intentLabelByLang(intent, lang);
+    if (lang === 'zh') {
+        if (/^状态:\s*\[[^\]]+\]/.test(s)) return s.replace(/^状态:\s*\[[^\]]+\]/, `状态: [${label}]`);
+        return `状态: [${label}] ${s}`;
+    }
+    if (/^Status:\s*\[[^\]]+\]/.test(s)) return s.replace(/^Status:\s*\[[^\]]+\]/, `Status: [${label}]`);
+    return `Status: [${label}] ${s}`;
 }
 
 // --- FEATURE 2: HEARTBEAT SUMMARY (Option 2: Real-time Error, Summary Info) ---
 let sessionLogs = { infoCount: 0, errorCount: 0, startTime: 0, errors: [] };
+const LOG_DEDUP_FILE = path.resolve(__dirname, '../../memory/evolution/log_dedup.json');
+const LOG_DEDUP_WINDOW_MS = Number.parseInt(process.env.EVOLVE_LOG_DEDUP_WINDOW_MS || '600000', 10); // 10 minutes
+const LOG_DEDUP_MAX_KEYS = Number.parseInt(process.env.EVOLVE_LOG_DEDUP_MAX_KEYS || '800', 10);
 
 // Lifecycle log target group (set via env or hardcode for reliability)
 const FEISHU_LOG_GROUP = process.env.LOG_TARGET || 'oc_ab79ebbe224701d0288891d6f8ddb10e';
 const FEISHU_CN_REPORT_GROUP = process.env.FEISHU_CN_REPORT_GROUP || 'oc_86ff5e0d40cb49c777a24156f379c48c';
 process.env.LOG_TARGET = FEISHU_LOG_GROUP;
+
+function normalizeLogForDedup(msg) {
+    return String(msg || '')
+        .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z/g, '<ts>')
+        .replace(/PID=\d+/g, 'PID=<id>')
+        .replace(/Cycle #\d+/g, 'Cycle #<id>')
+        .replace(/evolver_hand_[\w_:-]+/g, 'evolver_hand_<id>')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 500);
+}
+
+function shouldSuppressForwardLog(msg, type) {
+    if (String(process.env.EVOLVE_LOG_DEDUP || '').toLowerCase() === '0') return false;
+    const normalized = normalizeLogForDedup(msg);
+    if (!normalized) return false;
+    const keyRaw = `${String(type || 'INFO')}::${normalized}`;
+    const key = crypto.createHash('md5').update(keyRaw).digest('hex');
+    const now = Date.now();
+    try {
+        const dir = path.dirname(LOG_DEDUP_FILE);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        let cache = {};
+        if (fs.existsSync(LOG_DEDUP_FILE)) {
+            cache = JSON.parse(fs.readFileSync(LOG_DEDUP_FILE, 'utf8'));
+        }
+        for (const k of Object.keys(cache)) {
+            const ts = Number(cache[k] && cache[k].at);
+            if (!Number.isFinite(ts) || now - ts > LOG_DEDUP_WINDOW_MS) delete cache[k];
+        }
+        if (cache[key] && Number.isFinite(Number(cache[key].at)) && now - Number(cache[key].at) <= LOG_DEDUP_WINDOW_MS) {
+            cache[key].hits = Number(cache[key].hits || 1) + 1;
+            const tmpHit = `${LOG_DEDUP_FILE}.tmp.${process.pid}`;
+            fs.writeFileSync(tmpHit, JSON.stringify(cache, null, 2));
+            fs.renameSync(tmpHit, LOG_DEDUP_FILE);
+            return true;
+        }
+        cache[key] = { at: now, hits: 1, type: String(type || 'INFO') };
+        const keys = Object.keys(cache);
+        if (keys.length > LOG_DEDUP_MAX_KEYS) {
+            keys
+                .sort((a, b) => Number(cache[a].at || 0) - Number(cache[b].at || 0))
+                .slice(0, keys.length - LOG_DEDUP_MAX_KEYS)
+                .forEach((k) => { delete cache[k]; });
+        }
+        const tmp = `${LOG_DEDUP_FILE}.tmp.${process.pid}`;
+        fs.writeFileSync(tmp, JSON.stringify(cache, null, 2));
+        fs.renameSync(tmp, LOG_DEDUP_FILE);
+        return false;
+    } catch (_) {
+        return false;
+    }
+}
 
 function forwardLogToFeishu(msg, type = 'INFO') {
     // Avoid re-forwarding Feishu forward errors
@@ -172,12 +308,15 @@ function forwardLogToFeishu(msg, type = 'INFO') {
     if (type === 'ERROR') {
         sessionLogs.errorCount++;
         sessionLogs.errors.push(msg.slice(0, 300));
+        if (shouldSuppressForwardLog(msg, type)) return;
         sendCardInternal(msg, 'ERROR');
     } else if (type === 'WARNING') {
         // Non-critical issues: yellow card
+        if (shouldSuppressForwardLog(msg, type)) return;
         sendCardInternal(msg, 'WARNING');
     } else if (type === 'LIFECYCLE') {
         // Key lifecycle events: always forward
+        if (shouldSuppressForwardLog(msg, type)) return;
         sendCardInternal(msg, 'INFO');
     } else {
         sessionLogs.infoCount++;
@@ -941,9 +1080,21 @@ ${modelRoutingDirective}`;
                         console.warn('[Wrapper] No status file found for cycle ' + cycleTag + '. Using default.');
                     }
 
+                    // Canonical source of truth: latest EvolutionEvent (intent/outcome).
+                    // This keeps "Status" and dashboard "Recent" aligned.
+                    var latestEvent = readLatestEvolutionEvent();
+                    if (latestEvent && latestEvent.outcome && latestEvent.outcome.status) {
+                        var evStatus = String(latestEvent.outcome.status).toLowerCase();
+                        if (evStatus === 'failed' || evStatus === 'success') statusResult = evStatus;
+                    }
+                    if (latestEvent && latestEvent.intent) {
+                        enStatus = enforceStatusIntent(enStatus, latestEvent.intent, 'en');
+                        zhStatus = enforceStatusIntent(zhStatus, latestEvent.intent, 'zh');
+                    }
+
                     // Enforce non-generic evolution description and explicit cycle outcome.
-                    enStatus = ensureDetailedStatus(enStatus, 'en', cycleTag, gitInfo);
-                    zhStatus = ensureDetailedStatus(zhStatus, 'zh', cycleTag, gitInfo);
+                    enStatus = ensureDetailedStatus(enStatus, 'en', cycleTag, gitInfo, latestEvent);
+                    zhStatus = ensureDetailedStatus(zhStatus, 'zh', cycleTag, gitInfo, latestEvent);
                     enStatus = withOutcomeLine(enStatus, statusResult !== 'failed', 'en');
                     zhStatus = withOutcomeLine(zhStatus, statusResult !== 'failed', 'zh');
 
@@ -953,29 +1104,28 @@ ${modelRoutingDirective}`;
                         gitSuffix = '\n\nGit: ' + gitInfo.commitMsg + ' (' + gitInfo.shortHash + ')';
                     }
 
-                    // Send EN report
+                    // Send EN report (Optimized: Internal call)
                     try {
-                        execSync(
-                            'node skills/feishu-evolver-wrapper/report.js' +
-                            ' --cycle "Cycle #' + cycleTag + '"' +
-                            ' --title "🧬 Evolution #' + cycleTag + '"' +
-                            ' --status "' + enStatus.replace(/"/g, '\\"') + gitSuffix.replace(/"/g, '\\"') + '"',
-                            { cwd: path.resolve(__dirname, '../../'), encoding: 'utf8', timeout: 30000, stdio: 'pipe' }
-                        );
+                        await sendReport({
+                            cycle: cycleTag,
+                            title: `🧬 Evolution #${cycleTag}`,
+                            status: enStatus + gitSuffix,
+                            lang: 'en'
+                        });
                     } catch (reportErr) {
                         console.warn('[Wrapper] EN report failed:', reportErr.message);
                     }
 
-                    // Send CN report
+                    // Send CN report (Optimized: Internal call)
                     try {
-                        execSync(
-                            'node skills/feishu-evolver-wrapper/report.js' +
-                            ' --cycle "Cycle #' + cycleTag + '"' +
-                            ' --title "🧬 进化 #' + cycleTag + '"' +
-                            ' --status "' + zhStatus.replace(/"/g, '\\"') + gitSuffix.replace(/"/g, '\\"') + '"' +
-                            ' --target "' + FEISHU_CN_REPORT_GROUP + '"',
-                            { cwd: path.resolve(__dirname, '../../'), encoding: 'utf8', timeout: 30000, stdio: 'pipe' }
-                        );
+                        const FEISHU_CN_REPORT_GROUP = process.env.FEISHU_CN_REPORT_GROUP || 'oc_86ff5e0d40cb49c777a24156f379c48c';
+                        await sendReport({
+                            cycle: cycleTag,
+                            title: `🧬 进化 #${cycleTag}`,
+                            status: zhStatus + gitSuffix,
+                            target: FEISHU_CN_REPORT_GROUP,
+                            lang: 'cn'
+                        });
                     } catch (reportErr) {
                         console.warn('[Wrapper] CN report failed:', reportErr.message);
                     }
@@ -1045,23 +1195,22 @@ ${modelRoutingDirective}`;
                             'zh'
                         );
                         try {
-                            execSync(
-                                'node skills/feishu-evolver-wrapper/report.js' +
-                                ' --cycle "Cycle #' + cycleTag + '"' +
-                                ' --title "🧬 Evolution #' + cycleTag + '"' +
-                                ' --status "' + enFail.replace(/"/g, '\\"') + '"',
-                                { cwd: path.resolve(__dirname, '../../'), encoding: 'utf8', timeout: 30000, stdio: 'pipe' }
-                            );
+                            await sendReport({
+                                cycle: cycleTag,
+                                title: `🧬 Evolution #${cycleTag}`,
+                                status: enFail,
+                                lang: 'en'
+                            });
                         } catch (_) {}
                         try {
-                            execSync(
-                                'node skills/feishu-evolver-wrapper/report.js' +
-                                ' --cycle "Cycle #' + cycleTag + '"' +
-                                ' --title "🧬 进化 #' + cycleTag + '"' +
-                                ' --status "' + zhFail.replace(/"/g, '\\"') + '"' +
-                                ' --target "' + FEISHU_CN_REPORT_GROUP + '"',
-                                { cwd: path.resolve(__dirname, '../../'), encoding: 'utf8', timeout: 30000, stdio: 'pipe' }
-                            );
+                            const FEISHU_CN_REPORT_GROUP = process.env.FEISHU_CN_REPORT_GROUP || 'oc_86ff5e0d40cb49c777a24156f379c48c';
+                            await sendReport({
+                                cycle: cycleTag,
+                                title: `🧬 进化 #${cycleTag}`,
+                                status: zhFail,
+                                target: FEISHU_CN_REPORT_GROUP,
+                                lang: 'cn'
+                            });
                         } catch (_) {}
                     } catch (reportErr) {
                         console.error('[Wrapper] Failure report dispatch failed:', reportErr.message);

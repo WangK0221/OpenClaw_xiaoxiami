@@ -1,0 +1,21 @@
+{
+  "config": {
+    "wide_screen_mode": true
+  },
+  "header": {
+    "template": "blue",
+    "title": {
+      "content": "小虾米能力评分",
+      "tag": "plain_text"
+    }
+  },
+  "elements": [
+    {
+      "tag": "div",
+      "text": {
+        "content": "个性程度: ⭐⭐⭐⭐\n自主性: ⭐⭐⭐\n学习力: ⭐⭐⭐⭐⭐\n创造性: ⭐⭐⭐⭐\n掌握能力: ⭐⭐⭐⭐",
+        "tag": "lark_md"
+      }
+    }
+  ]
+}
